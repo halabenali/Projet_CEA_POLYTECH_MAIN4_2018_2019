@@ -48,35 +48,43 @@ double * choleskyLoopsFacto(const double *A, const int &n){
 void choleskyTileFacto(double *A, const int &n){
 
   lapack_int info;
+  double *D = new double[n*n];
+  double *C = new double[n*n];
   
   for(int i=0; i<n; i++){
-    
-    info = LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,A+i*n+i,1);
+
+    info = LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,&A[i*n+i],1);
     
     if(info == 0) std::cerr << " : info=0, the execution is successful" << std::endl;
     else if(info < 0) std::cerr << " : INFO = -i, the i-th argument had an illegal value\tinfo = " << info << std::endl;
-     else  std::cerr << " : INFO = i, the leading minor of order i is not positive definite, and the factorization could not be completed\tinfo = " << info << std::endl;
+    else  std::cerr << " : INFO = i, the leading minor of order i is not positive definite, and the factorization could not be completed\tinfo = " << info << std::endl;
 
-    double *D = new double[n-i-1];
     for(int t=0; t<n-i-1; t++) D[t] = A[(i+1+t)*n+i];
-    
-    cblas_dtrsm ( CblasRowMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit, n-(i+1), 1, 1,A+i*n+i, 1, D, 1 );
+
+    if(i<n-1)
+      cblas_dtrsm ( CblasRowMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit, n-(i+1), 1, 1,A+i*n+i, 1, D, 1 );
 
     for(int t=0; t<n-i-1; t++) A[(i+1+t)*n+i]= D[t];
 
-    double *C = new double[(n-i-1)*i];
-      for(int t=0; t<n-i-1; t++)
-	for(int e=0; e<i; e++)
-	  C[t*i+e] = A[(i+1+t)*n+e];
+    cblas_dsyrk (CblasRowMajor,CblasLower,CblasNoTrans,1,((i+1)),-1,A+((i+1))*n,((i+1)),1,&A[((i+1))*n+((i+1))],1);
 
-    for(int k=i+1; k<n; k++){
-      cblas_dsyrk (CblasRowMajor,CblasLower,CblasNoTrans,1,i,-1,A+i*n,std::max(i,1),1,A+k*n+k,1);
-      cblas_dgemm (CblasRowMajor, CblasNoTrans, CblasTrans, n-(i+1), 1, i,-1,C, std::max(i,1), A+i*n , std::max(i,1), 1, D, 1);
-      for(int t=0; t<n-i-1; t++) A[(i+1+t)*n+i]= D[t];
-    }
-    delete[] D;
-    delete[] C;
+    for(int t=0; t<n-((i+1))-1; t++) D[t]= A[(((i+1))+1+t)*n+((i+1))];
+
+    for(int t=0; t<n-((i+1))-1; t++)
+      for(int e=0; e<((i+1)); e++)
+	C[t*((i+1))+e] = A[(((i+1))+1+t)*n+e];
+
+    if(i<n-1)
+      cblas_dgemm (CblasRowMajor, CblasNoTrans, CblasTrans, n-(((i+1))+1), 1, ((i+1)),-1,C, ((i+1)), A+((i+1))*n , ((i+1)), 1, D, 1);
+      
+    for(int t=0; t<n-((i+1))-1; t++) A[(((i+1))+1+t)*n+((i+1))]= D[t];
+
    }
+
+  delete[] D;
+  D = nullptr;
+  delete[] C;
+  C = nullptr;
 
     return;
 }
