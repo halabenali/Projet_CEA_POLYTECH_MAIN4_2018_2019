@@ -1,0 +1,3 @@
+main.o: main.cpp file_API.h cholesky_facto.h
+cholesky_facto.o: cholesky_facto.cpp cholesky_facto.h
+file_API.o: file_API.cpp file_API.h
