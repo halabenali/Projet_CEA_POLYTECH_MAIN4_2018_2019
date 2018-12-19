@@ -45,46 +45,58 @@ double * choleskyLoopsFacto(const double *A, const int &n){
 }
 
 
-void choleskyTileFacto(double *A, const int &n){
+int choleskyTileFacto(double *A, const int &n){
 
-  lapack_int info;
-  double *D = new double[n*n];
-  double *C = new double[n*n];
+  lapack_int info; // pour stocker le retour de la fonction LAPACKE_dpotrf
+
+  // pour stockage des sous matrices/blocs de la matrice A necessaires a l algorithme (pour les passer aux noyaux)
+  double *D = nullptr;  
+  double *C = nullptr;
   
   for(int i=0; i<n; i++){
 
     info = LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,&A[i*n+i],1);
-    
-    if(info == 0) std::cerr << " : info=0, the execution is successful" << std::endl;
-    else if(info < 0) std::cerr << " : INFO = -i, the i-th argument had an illegal value\tinfo = " << info << std::endl;
-    else  std::cerr << " : INFO = i, the leading minor of order i is not positive definite, and the factorization could not be completed\tinfo = " << info << std::endl;
 
-    for(int t=0; t<n-i-1; t++) D[t] = A[(i+1+t)*n+i];
+    // Cas ou une erreur s'est produite avec la fonction potrf. Possible si le coefficient passe a potrf est negatif car il faut une matrice SDF !
+    // Une matrice SDF a un coefficient, c-a-d une matrice carre de taille 1 SDF, est tout simplement un reel positif
+    // Ce n'est pas par ce que A est une matrice de taille n SDF que tous ses coefficients sont positifs... 
+    if(info != 0) {
+      if(info < 0) std::cerr << " tile cholesky factorization, iteration " << i << " : INFO = -i, the i-th argument had an illegal value\tinfo = " << info << std::endl;
+      else  std::cerr << " tile cholesky factorization, iteration " << i << " : INFO = i, the leading minor of order i is not positive definite, and the factorization could not be completed\tinfo = " << info << std::endl;
+      
+      return 0 ; // echec, on retourne 0 ! 
+    }
 
-    if(i<n-1)
+    D = new double[n-i-1]; // block vecteur cf. algorithme des blocks pour identifier de quel bloc il s'agit 
+    for(int t=0; t<n-i-1; t++) D[t] = A[(i+1+t)*n+i]; // on copie/recupere le block de A utile pour les noyaux pour l'iteration en cours 
+ 
+    if(i<n-1) // le noyau trsm ne doit pas etre appelle dans la derniere iteration de l'algorithme
       cblas_dtrsm ( CblasRowMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit, n-(i+1), 1, 1,A+i*n+i, 1, D, 1 );
 
-    for(int t=0; t<n-i-1; t++) A[(i+1+t)*n+i]= D[t];
+    for(int t=0; t<n-i-1; t++) A[(i+1+t)*n+i]= D[t]; // on met a jours A avec le resultat
 
-    cblas_dsyrk (CblasRowMajor,CblasLower,CblasNoTrans,1,((i+1)),-1,A+((i+1))*n,((i+1)),1,&A[((i+1))*n+((i+1))],1);
+    cblas_dsyrk (CblasRowMajor,CblasLower,CblasNoTrans,1,i+1,-1,A+(i+1)*n,i+1,1,&A[(i+1)*n+i+1],1);
 
-    for(int t=0; t<n-((i+1))-1; t++) D[t]= A[(((i+1))+1+t)*n+((i+1))];
+    for(int t=0; t<n-(i+1)-1; t++) D[t]= A[(i+1+1+t)*n+i+1]; // vecteur (bloc de A)
 
-    for(int t=0; t<n-((i+1))-1; t++)
-      for(int e=0; e<((i+1)); e++)
-	C[t*((i+1))+e] = A[(((i+1))+1+t)*n+e];
+    if(i<n-1){ // le noyau gemm ne doit pas etre appelle dans la derniere iteration de l'algorithme, cf l'algorithme  
 
-    if(i<n-1)
-      cblas_dgemm (CblasRowMajor, CblasNoTrans, CblasTrans, n-(((i+1))+1), 1, ((i+1)),-1,C, ((i+1)), A+((i+1))*n , ((i+1)), 1, D, 1);
+      // matrice (sous matrice de A), le bloc de A utilise dans le noyau gemm
+      C = new double[(n-i-1-1)*(i+1)]; 
+      for(int t=0; t<n-(i+1)-1; t++)
+	for(int e=0; e<i+1; e++)
+	  C[t*(i+1)+e] = A[(i+1+1+t)*n+e];
       
-    for(int t=0; t<n-((i+1))-1; t++) A[(((i+1))+1+t)*n+((i+1))]= D[t];
+      cblas_dgemm (CblasRowMajor, CblasNoTrans, CblasTrans, n-(i+1+1), 1,i+1,-1,C,i+1, A+(i+1)*n ,i+1, 1, D, 1);
+    }
+      
+    for(int t=0; t<n-(i+1)-1; t++) A[(i+1+1+t)*n+i+1]= D[t]; // mise a jour de A avec le resultat 
 
+    delete[] D;
+    D = nullptr;
+    delete[] C;
+    C = nullptr;
    }
 
-  delete[] D;
-  D = nullptr;
-  delete[] C;
-  C = nullptr;
-
-    return;
+  return 1 ; // succes, on a pu aller au bout de l'algorithme, on retourne 1 ! 
 }
